@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="colorPrimary">#F9A825</color>
-    <color name="colorPrimaryDark">#940699</color>
+    <color name="colorPrimaryDark">#F06292</color>
     <color name="colorAccent">#D81B60</color>
+    <color name="pink_bg">#F06292</color>
     <color name="pink">#EA09F1</color>
+    <color name="pink_mild">#FFB6C1</color>
     <color name="pink_dark">#940699</color>
     <color name="transparent">#940699</color>
 </resources>

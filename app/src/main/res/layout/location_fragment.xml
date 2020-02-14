@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ui.location.LocationFragment">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+
+
+        <ImageView
+            android:id="@+id/loc_icon"
+            android:layout_width="@dimen/loc_icon_size"
+            android:layout_height="@dimen/loc_icon_size"
+            android:src="@drawable/loc_white"
+            android:layout_centerVertical="true"
+            android:layout_alignParentLeft="true"
+            android:layout_marginStart="@dimen/location_icon_margin_start"
+            />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_marginStart="8dp"
+            android:layout_height="@dimen/loc_icon_size"
+            android:layout_toEndOf="@+id/loc_icon"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/area"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="cursive"
+                android:text="BENGALURU"
+                android:textColor="@android:color/white"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/last_updated_at"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:fontFamily="serif-monospace"
+                android:text="Last Update at"
+                android:textColor="@android:color/white"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+
+
+
+    </RelativeLayout>
+
+</FrameLayout>
