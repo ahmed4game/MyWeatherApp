@@ -1,11 +1,9 @@
-package com.ahmed.myapplication.ui.location;
+package com.ahmed.myapplication.ui.locationfinder;
 
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProviders;
-
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -13,29 +11,22 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Address;
-import android.location.Geocoder;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
-import android.net.Uri;
 import android.os.Bundle;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-
 import android.os.Looper;
-import android.provider.Settings;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Toast;
+import android.widget.TextView;
 
-import com.ahmed.myapplication.BuildConfig;
-import com.ahmed.myapplication.MyApplication;
+import com.ahmed.myapplication.Constant;
+import com.ahmed.myapplication.models.LocationModel;
 import com.ahmed.myapplication.R;
 import com.ahmed.myapplication.activities.ScrollingActivity;
+import com.ahmed.myapplication.utils.NetworkUtils;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -52,21 +43,18 @@ import com.karumi.dexter.listener.PermissionDeniedResponse;
 import com.karumi.dexter.listener.PermissionGrantedResponse;
 import com.karumi.dexter.listener.PermissionRequest;
 import com.karumi.dexter.listener.single.PermissionListener;
-
-import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.List;
-import java.util.Locale;
 
-import static android.content.Context.LOCATION_SERVICE;
+import static com.ahmed.myapplication.MyApplication.*;
 
-public class LocationFragment extends Fragment {
+public class LocationFinderFragment extends Fragment {
 
-    private LocationViewModel mViewModel;
+    private LocationFinderViewModel mViewModel;
+    private boolean isUserPromptedForGPS;
+
+    private ScrollingActivity activity;
     public static String BROADCAST_ACTION = "com.action.activity.data";
-    private MyApplication mInstance;
-    private static final String TAG = LocationFragment.class.getSimpleName();
 
     // location last updated time
     private String mLastUpdateTime;
@@ -88,7 +76,8 @@ public class LocationFragment extends Fragment {
     private LocationSettingsRequest mLocationSettingsRequest;
     private LocationCallback mLocationCallback;
     private Location mCurrentLocation;
-    private ScrollingActivity activity;
+
+    private TextView area,lastUpdatedAt;
 
     @Override
     public void onAttach(Context context) {
@@ -96,25 +85,25 @@ public class LocationFragment extends Fragment {
         activity = (ScrollingActivity) context;
     }
 
-    private BroadcastReceiver activityDataReciever = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            activity.showToast("onRestart LifeCycle called from fragment");
-        }
-    };
-
-    private void init() {
+    private void initLocationSetup() {
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(getActivity());
         mSettingsClient = LocationServices.getSettingsClient(getActivity());
         mLocationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
-                activity.showToast("LocationCallBack onLocationResult()");
                 super.onLocationResult(locationResult);
-                // location is received
                 mCurrentLocation = locationResult.getLastLocation();
                 mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-                updateLocationUI();
+                activity.showToast("onLocationResult::Provider = "+mCurrentLocation.getProvider() +" LatLng: " +
+                        mCurrentLocation.getLatitude()+","+mCurrentLocation.getLongitude());
+                Address address = activity.getLocationUtils().updateLocationUI(mCurrentLocation.getLatitude(),mCurrentLocation.getLongitude());
+
+                if (address != null) {
+                    mViewModel.setLocationModelMutableLiveData(new LocationModel(address.getSubLocality(),
+                            address.getLocality(), address.getAdminArea(), DateFormat.getTimeInstance().format(new Date())));
+                }else{
+                    throw new UnsupportedOperationException("Google's GeoCoder API is not Stable");
+                }
             }
         };
 
@@ -134,99 +123,110 @@ public class LocationFragment extends Fragment {
         return permissionState == PackageManager.PERMISSION_GRANTED;
     }
 
-    @SuppressLint("MissingPermission")
-    private void testingNetworkProvider(){
-        LocationManager locationManager = (LocationManager) getActivity().getSystemService(LOCATION_SERVICE);
-        Location location = null;
-        double latitude = 0d, longitude = 0d;
 
-        boolean isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-            locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    15000,
-                    20, new LocationListener() {
-                        @Override
-                        public void onLocationChanged(Location location) {
-                            activity.showToast("onLocationChanged");
-                            activity.showToast("Lat:"+location.getLatitude()+" Long:"+location.getLongitude()+" Provider:"+ location.getProvider());
-                        }
-
-                        @Override
-                        public void onStatusChanged(String provider, int status, Bundle extras) {
-                            activity.showToast("onStatusChanged "+provider);
-                        }
-
-                        @Override
-                        public void onProviderEnabled(String provider) {
-                            activity.showToast("onProviderEnabled "+provider);
-                        }
-
-                        @Override
-                        public void onProviderDisabled(String provider) {
-                            activity.showToast("onProviderDisabled "+provider);
-                        }
-                    });
-
-            activity.showToast("Location");
-
-
-            if (isNetworkEnabled){
-                location = locationManager
-                        .getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-
-                if (location != null) {
-                    latitude = location.getLatitude();
-                    longitude = location.getLongitude();
-                    Toast.makeText(
-                            getActivity(),
-                            "Mobile Location (NW): \nLatitude: " + latitude
-                                    + "\nLongitude: " + longitude,
-                            Toast.LENGTH_LONG).show();
-                }
-            }
-
-
-
-
-    }
-
-
+    @SuppressLint("CheckResult")
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        mInstance = MyApplication.getInstance();
-        return inflater.inflate(R.layout.location_fragment, container, false);
+        activity.mInstance = getInstance();
+        View view = inflater.inflate(R.layout.location_finder_fragment, container, false);
+
+        area = view.findViewById(R.id.area);
+        lastUpdatedAt = view.findViewById(R.id.last_updated_at);
+
+        return view;
     }
 
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-
-        init();
-        permissionCheck();
-        mViewModel = ViewModelProviders.of(this).get(LocationViewModel.class);
-        mViewModel.getLocationLiveData().observe(this, locationModel -> {
-            activity.showToast("Observer Data Called");
+        mViewModel = ViewModelProviders.of(this).get(LocationFinderViewModel.class);
+        mViewModel.getCurrentWeatherModelMutableLiveData().observe(getActivity(), locationModel -> {
+            // TODO: 2020-02-21 Update your UI
+            activity.showToast("ViewModel Observer triggered");
         });
+        mViewModel.getLocationModelMutableLiveData().observe(this, locationModel -> {
+            // TODO: 2020-02-24 Update Location UI (Header)
+            activity.showToast("From ViewModel: "+locationModel.toString());
+            area.setText(locationModel.getAreaName());
+            lastUpdatedAt.setText("Last Update At: "+DateFormat.getTimeInstance().format(new Date()));
+        });
+
+        initLocationSetup();
+        checkDependencies();
     }
 
-    private void permissionCheck() {
-        // Resuming location updates depending on button state and
-        // allowed permissions
-        if (checkPermissions()) {
-            activity.showToast("Location askPermission granted");
-            startLocationUpdates();
-        } else {
-            activity.showToast("Location askPermission needed");
-            askPermission();
+    private void checkDependencies() {
+        if (checkInternetConnection()) {
+            checkPermissionDependencies();
         }
     }
+
+    private void checkPermissionDependencies() {
+        if (checkPermissions()) {
+            activity.showToast("Location permission granted");
+            // TODO: 2020-02-19 Start your flow here
+//            testingNetworkProvider(); Depends on GPS
+            startLocationUpdates();
+        } else {
+            activity.showToast("Location permission needed");
+            permission();
+        }
+    }
+
+    //region BroadCast Reciever responsible for Connectivity Change and Broadcast action
+    private BroadcastReceiver activityDataReciever = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            if (intent.getAction().equals(BROADCAST_ACTION)) {
+                activity.showToast("onRestart LifeCycle called from Activity to Fragment");
+                checkDependencies();
+            }else if (intent.getAction().equals(Constant.CONNECTIVITY_CHANGE_ACTION)) {
+                activity.showToast("Connectivity Changed");
+                if (activity.isNetwrokAvailable)
+                    activity.showToast("Internet turned ON");
+                else {
+                    activity.showToast("Internet turned OFF");
+                    activity.showAlertDialog("Internet is Down", "With internet connection, we can provide better Data, Do you want turn on Internet?",
+                            "SURE", "DISMISS",
+                            (dialog, which) -> {
+                                // TODO: 2020-02-24 Positive
+                                if (!NetworkUtils.isInternetAvailable(activity))
+                                    NetworkUtils.openSettings(activity);
+                            },
+                            (dialog, which) -> {
+                                // TODO: 2020-02-24 Negative
+                                dialog.dismiss();
+                            });
+                }
+            }
+        }
+    };
+    //endregion
 
     @Override
     public void onResume() {
         super.onResume();
         activity.showToast("onResume");
-        getActivity().registerReceiver(activityDataReciever, new IntentFilter(BROADCAST_ACTION));
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BROADCAST_ACTION);
+        filter.addAction(Constant.CONNECTIVITY_CHANGE_ACTION);
+        getActivity().registerReceiver(activityDataReciever, filter);
+
+        if (isUserPromptedForGPS){
+            if (!activity.getLocationUtils().isGpsOn()){
+                activity.showAlertDialog("Location Alert",
+                        "Your GPS provider is Off, Please Turn ON to continue",
+                        "SURE", "DISMISS",
+                        (dialog, which) -> {
+                            startLocationUpdates();
+                        },
+                        (dialog, which) -> {
+                            // TODO: 2020-02-21 handle user rejection to turn On GPS
+                        });
+            }
+        }
     }
 
     @Override
@@ -235,65 +235,49 @@ public class LocationFragment extends Fragment {
         getActivity().unregisterReceiver(activityDataReciever);
     }
 
-    private void updateLocationUI() {
-        if (mCurrentLocation != null) {
-
-            Geocoder geocoder = new Geocoder(getActivity(), Locale.getDefault());
-
-            String result = null;
-            List<Address> addressList = null;
-            try {
-                addressList = geocoder.getFromLocation(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude(), 1);
-            } catch (IOException e) {
-                e.printStackTrace();
-                activity.showToast(e.getLocalizedMessage());
-            }
-            if (addressList != null && addressList.size() > 0) {
-                Address address = addressList.get(0);
-
-
-                StringBuilder sb = new StringBuilder();
-
-                // Area
-                sb.append(address.getSubLocality()).append("\n");
-
-                sb.append(address.getLocality()).append("\n");
-                sb.append(address.getPostalCode()).append("\n");
-                sb.append(address.getCountryName());
-                result = sb.toString();
-
-                // location last updated time
-                activity.showToast("Last updated on: " + mLastUpdateTime);
-                activity.showToast(result);
-            }
-
+    private boolean checkInternetConnection() {
+        if (NetworkUtils.isInternetAvailable(activity)){
+            return true;
+        }else {
+            activity.showAlertDialog(null, "Please check your Internet connection.", "OK", "DISMISS",  (dialog, which) -> {
+                if (!NetworkUtils.isInternetAvailable(activity)) {
+                    NetworkUtils.openSettings(activity);
+                } else {
+                    checkPermissionDependencies();
+                }
+            }, (dialog,which) -> {
+                if (!NetworkUtils.isInternetAvailable(activity)) {
+                    activity.finish();
+                } else {
+                    checkPermissionDependencies();
+                }
+            });
+            return false;
         }
-
-//        testingNetworkProvider(); //  working
     }
 
-    private void askPermission() {
+    private void permission() {
         Dexter.withActivity(getActivity())
                 .withPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 .withListener(new PermissionListener() {
                     @Override
                     public void onPermissionGranted(PermissionGrantedResponse response) {
-                        // askPermission is granted
+                        // permission is granted
                         activity.showToast("Permission granted");
-                        updateLocationUI();
+                        // TODO: 2020-02-19 Start your flow here
                     }
 
                     @Override
                     public void onPermissionDenied(PermissionDeniedResponse response) {
-                        // check for permanent denial of askPermission
+                        // check for permanent denial of permission
 
                         if (response.isPermanentlyDenied()) {
                             // navigate user to app settings
                             activity.showToast("Permission permenantly denied");
-                            activity.showAlertDialog("Permission Alert", "Without Location Permission Application can't continue.\n Do you want to continue?",
-                                    "OK", "CANCEL", (dialog, which) -> {
+                            activity.showAlertDialog("Permission Permenantl Denied Alert", "Without Location Permission Application can't continue.",
+                                    "ALLOW", "I'M SURE", (dialog, which) -> {
                                         // positive button listener
-                                        openSettings();
+                                        activity.getLocationUtils().openSettings();
                                     }, (dialog, which) -> {
                                         // negative button listener
                                         getActivity().finish();
@@ -304,7 +288,7 @@ public class LocationFragment extends Fragment {
                             activity.showAlertDialog("Permission Alert", "Without Location Permission Application can't continue.\n Do you want to continue?",
                                     "OK", "CANCEL", (dialog, which) -> {
                                         // positive button listener
-                                        askPermission();
+                                        permission();
                                     }, (dialog, which) -> {
                                         // negative button listener
                                         getActivity().finish();
@@ -320,17 +304,6 @@ public class LocationFragment extends Fragment {
                 }).check();
     }
 
-    private void openSettings() {
-        Intent intent = new Intent();
-        intent.setAction(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-        Uri uri = Uri.fromParts("package",
-                BuildConfig.APPLICATION_ID, null);
-        intent.setData(uri);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivityForResult(intent,REQUEST_CHECK_SETTINGS);
-    }
-
     /**
      * Starting location updates
      * Check whether location settings are satisfied and then
@@ -343,13 +316,9 @@ public class LocationFragment extends Fragment {
                     activity.showToast("All location settings are satisfied.");
                     activity.showToast("Started location updates!");
 
-
-
                     //noinspection MissingPermission
                     mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                             mLocationCallback, Looper.myLooper());
-
-                    updateLocationUI();
                 })
                 .addOnFailureListener(getActivity(), e -> {
                     int statusCode = ((ApiException) e).getStatusCode();
@@ -361,8 +330,8 @@ public class LocationFragment extends Fragment {
                                 // Show the dialog by calling startResolutionForResult(), and check the
                                 // result in onActivityResult().
                                 ResolvableApiException rae = (ResolvableApiException) e;
-                                rae.startResolutionForResult(getActivity(), REQUEST_CHECK_SETTINGS);
-//                                startIntentSenderForResult(rae.getResolution().getIntentSender(), REQUEST_CHECK_SETTINGS, null, 0, 0, 0, null);
+                                rae.startResolutionForResult(getActivity(), LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
+                                isUserPromptedForGPS = true;
                             } catch (IntentSender.SendIntentException sie) {
                                 activity.showToast("PendingIntent unable to execute request.");
                             }
@@ -370,31 +339,9 @@ public class LocationFragment extends Fragment {
                         case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
                             String errorMessage = "Location settings are inadequate, and cannot be " +
                                     "fixed here. Fix in Settings.";
-                            Log.e(TAG, errorMessage);
+                            activity.showToast("Error Message:- "+errorMessage);
                             activity.showToast(errorMessage);
                     }
-
-                    updateLocationUI();
                 });
     }
-
-    @Override
-    public void onActivityResult ( int requestCode, int resultCode, Intent data){
-        switch (requestCode) {
-            // Check for the integer request code originally supplied to startResolutionForResult().
-            case REQUEST_CHECK_SETTINGS:
-                switch (resultCode) {
-                    case Activity.RESULT_OK:
-                        activity.showToast("User agreed to make required location settings changes.");
-                        // Nothing to do. startLocationupdates() gets called in onResume again.
-                        break;
-                    case Activity.RESULT_CANCELED:
-                        activity.showToast("User chose not to make required location settings changes.");
-                        break;
-                }
-                break;
-        }
-    }
-
-
 }

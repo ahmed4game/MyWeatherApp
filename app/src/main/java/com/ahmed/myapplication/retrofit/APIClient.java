@@ -1,8 +1,9 @@
-package com.ahmed.myapplication;
+package com.ahmed.myapplication.retrofit;
 
 import android.content.Context;
 import android.text.TextUtils;
 
+import com.ahmed.myapplication.Constant;
 import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
 
 import java.io.IOException;
